@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Upload invoices{% endblock %}
+{% block content %}
+<section class="narrow">
+  <p class="eyebrow">BATCH IMPORT</p>
+  <h1>Upload PDF invoices</h1>
+  <p class="lead">The system extracts structured fields, calculates confidence, and flags duplicate invoices.</p>
+
+  <form class="upload-card" method="post" action="/upload" enctype="multipart/form-data">
+    <div class="dropzone">
+      <div class="upload-icon">PDF</div>
+      <h2>Select one or more invoice files</h2>
+      <p>Text-based PDF invoices are supported in this portfolio demo.</p>
+      <input type="file" name="files" accept=".pdf,application/pdf" multiple required>
+    </div>
+    <button class="button primary wide" type="submit">Process invoices</button>
+  </form>
+
+  <div class="info-grid">
+    <article><strong>Field extraction</strong><span>Vendor, invoice number, dates, subtotal, tax, total, and currency.</span></article>
+    <article><strong>Quality control</strong><span>Confidence scoring and a manual review workflow.</span></article>
+    <article><strong>Duplicate detection</strong><span>SHA-256 file checks plus vendor/invoice-number matching.</span></article>
+  </div>
+</section>
+{% endblock %}

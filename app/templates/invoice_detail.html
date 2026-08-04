@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Invoice {{ invoice.invoice_number or invoice.id }}{% endblock %}
+{% block content %}
+<section class="hero-row compact">
+  <div>
+    <a class="back" href="/">← Back to dashboard</a>
+    <p class="eyebrow">DOCUMENT #{{ invoice.id }}</p>
+    <h1>{{ invoice.vendor or "Unknown vendor" }}</h1>
+    <p class="lead">{{ invoice.filename }}</p>
+  </div>
+  <div class="detail-status">
+    <span class="badge {{ invoice.status }}">{{ invoice.status }}</span>
+    <strong>{{ "%.0f"|format(invoice.confidence) }}% confidence</strong>
+  </div>
+</section>
+
+{% if duplicate %}
+<div class="alert">Possible duplicate of <a href="/invoices/{{ duplicate.id }}">invoice #{{ duplicate.id }} — {{ duplicate.invoice_number }}</a>.</div>
+{% endif %}
+
+<section class="detail-grid">
+  <form class="panel form-panel" method="post" action="/invoices/{{ invoice.id }}/update">
+    <div class="panel-head"><div><h2>Extracted fields</h2><p>Review and correct values before approval.</p></div></div>
+    <div class="form-grid">
+      <label>Vendor<input name="vendor" value="{{ invoice.vendor or '' }}"></label>
+      <label>Invoice number<input name="invoice_number" value="{{ invoice.invoice_number or '' }}"></label>
+      <label>Invoice date<input name="invoice_date" value="{{ invoice.invoice_date or '' }}"></label>
+      <label>Due date<input name="due_date" value="{{ invoice.due_date or '' }}"></label>
+      <label>Currency<input name="currency" value="{{ invoice.currency or '' }}"></label>
+      <label>Subtotal<input name="subtotal" value="{{ invoice.subtotal if invoice.subtotal is not none else '' }}"></label>
+      <label>Tax<input name="tax" value="{{ invoice.tax if invoice.tax is not none else '' }}"></label>
+      <label>Total<input name="total" value="{{ invoice.total if invoice.total is not none else '' }}"></label>
+      <label>Status
+        <select name="status">
+          <option value="review" {% if invoice.status == 'review' %}selected{% endif %}>Needs review</option>
+          <option value="approved" {% if invoice.status == 'approved' %}selected{% endif %}>Approved</option>
+          <option value="duplicate" {% if invoice.status == 'duplicate' %}selected{% endif %}>Duplicate</option>
+        </select>
+      </label>
+      <label class="full">Notes<textarea name="notes" rows="4">{{ invoice.notes or '' }}</textarea></label>
+    </div>
+    <button class="button primary" type="submit">Save changes</button>
+  </form>
+
+  <section class="panel raw-panel">
+    <div class="panel-head"><div><h2>Extracted PDF text</h2><p>Original text used by the parser.</p></div></div>
+    <pre>{{ invoice.raw_text }}</pre>
+  </section>
+</section>
+{% endblock %}

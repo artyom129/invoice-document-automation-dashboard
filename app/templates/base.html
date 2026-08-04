@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}InvoiceFlow{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a href="/" class="brand">
+      <span class="logo">IF</span>
+      <span>
+        <strong>InvoiceFlow</strong>
+        <small>Document Automation</small>
+      </span>
+    </a>
+    <nav>
+      <a href="/">Dashboard</a>
+      <a href="/upload">Upload PDFs</a>
+      <a href="/docs" target="_blank">API Docs</a>
+      <a href="/health" target="_blank">Health</a>
+    </nav>
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  <footer>FastAPI · PyMuPDF · SQLite · Excel Automation</footer>
+</body>
+</html>
