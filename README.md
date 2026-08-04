@@ -2,8 +2,6 @@
 
 A portfolio-ready FastAPI application for extracting structured invoice data from PDF files, reviewing low-confidence records, detecting duplicates, and exporting clean accounting datasets to CSV and Excel.
 
-![Dashboard](docs/screenshots/dashboard.png)
-
 ## Business problem
 
 Finance and operations teams often receive invoices as PDF files and manually copy vendor names, invoice numbers, dates, tax, and totals into spreadsheets. This project automates the repetitive part while keeping a human review step for uncertain records.
