@@ -1,5 +1,7 @@
 # Invoice Document Automation Dashboard
 
+[![Tests](https://github.com/artyom129/invoice-document-automation-dashboard/actions/workflows/tests.yml/badge.svg)](https://github.com/artyom129/invoice-document-automation-dashboard/actions/workflows/tests.yml)
+
 A portfolio-ready FastAPI application for extracting structured invoice data from PDF files, reviewing low-confidence records, detecting duplicates, and exporting clean accounting datasets to CSV and Excel.
 
 ## Business problem
