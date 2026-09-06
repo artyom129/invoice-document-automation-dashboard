@@ -1,3 +1,5 @@
+**English** | [Русский](README_RU.md)
+
 # Invoice Document Automation Dashboard
 
 A portfolio-ready FastAPI application for extracting structured invoice data from PDF files, reviewing low-confidence records, detecting duplicates, and exporting clean accounting datasets to CSV and Excel.
