@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}{{ status_code }} · InvoiceFlow{% endblock %}
+{% block content %}
+<section class="narrow">
+  <div class="panel">
+    <div class="empty-state">
+      <strong>{{ message }}</strong>
+      <p><a class="text-link" href="/">Back to the invoice queue</a></p>
+    </div>
+  </div>
+</section>
+{% endblock %}

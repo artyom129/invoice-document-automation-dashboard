@@ -1,0 +1,4 @@
+# Binary files must never get line-ending conversion: it corrupts PDFs.
+*.pdf binary
+*.jpg binary
+*.png binary

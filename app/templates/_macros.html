@@ -1,0 +1,12 @@
+{# One way to show a status and a confidence value everywhere. #}
+{% macro status(value) -%}
+<span class="status status-{{ value }}">{{ 'needs review' if value == 'review' else value }}</span>
+{%- endmacro %}
+
+{# The tick marks the confidence at which invoices are approved automatically. #}
+{% macro confidence(value, threshold) -%}
+<span class="confidence" title="{{ '%.0f'|format(value) }}% confidence, approved automatically from {{ threshold }}%">
+  <span class="meter"><span class="meter-fill {{ 'is-high' if value >= threshold else 'is-low' }}" style="width: {{ value }}%"></span><span class="meter-tick" style="left: {{ threshold }}%"></span></span>
+  <span class="num">{{ '%.0f'|format(value) }}</span>
+</span>
+{%- endmacro %}

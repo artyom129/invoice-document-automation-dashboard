@@ -1,25 +1,61 @@
 {% extends "base.html" %}
-{% block title %}Upload invoices{% endblock %}
+{% block title %}Upload · InvoiceFlow{% endblock %}
 {% block content %}
 <section class="narrow">
-  <p class="eyebrow">BATCH IMPORT</p>
-  <h1>Upload PDF invoices</h1>
-  <p class="lead">The system extracts structured fields, calculates confidence, and flags duplicate invoices.</p>
-
-  <form class="upload-card" method="post" action="/upload" enctype="multipart/form-data">
-    <div class="dropzone">
-      <div class="upload-icon">PDF</div>
-      <h2>Select one or more invoice files</h2>
-      <p>Text-based PDF invoices are supported in this portfolio demo.</p>
-      <input type="file" name="files" accept=".pdf,application/pdf" multiple required>
+  <div class="page-head">
+    <div>
+      <h1>Upload invoices</h1>
+      <p>Select PDF invoices with selectable text. Fields are extracted, scored, and checked for duplicates.</p>
     </div>
-    <button class="button primary wide" type="submit">Process invoices</button>
+  </div>
+
+  <form class="panel upload-card" method="post" action="/upload" enctype="multipart/form-data">
+    <label class="dropzone">
+      <span class="dropzone-title">Choose PDF files</span>
+      <span class="muted">Several at once is fine. Up to {{ '%g'|format(max_mb) }} MB each. Scanned images are not read, there is no OCR.</span>
+      <input type="file" name="files" accept=".pdf,application/pdf" multiple required>
+    </label>
+    <button class="button" type="submit">Process invoices</button>
   </form>
 
-  <div class="info-grid">
-    <article><strong>Field extraction</strong><span>Vendor, invoice number, dates, subtotal, tax, total, and currency.</span></article>
-    <article><strong>Quality control</strong><span>Confidence scoring and a manual review workflow.</span></article>
-    <article><strong>Duplicate detection</strong><span>SHA-256 file checks plus vendor/invoice-number matching.</span></article>
-  </div>
+  {% if results is not none %}
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Result</h2>
+      <span class="muted">
+        {{ summary.processed }} processed{% if summary.approved %}, {{ summary.approved }} approved{% endif %}{% if summary.review %}, {{ summary.review }} need review{% endif %}{% if summary.duplicate %}, {{ summary.duplicate }} duplicate{{ '' if summary.duplicate == 1 else 's' }}{% endif %}{% if summary.already_uploaded %}, {{ summary.already_uploaded }} already uploaded{% endif %}{% if summary.skipped %}, {{ summary.skipped }} skipped{% endif %}
+      </span>
+    </div>
+    {% if results %}
+    <div class="table-wrap"><table>
+      <thead><tr><th>File</th><th>Outcome</th><th>Detail</th></tr></thead>
+      <tbody>
+      {% for item in results %}
+        <tr>
+          <td>{% if item.invoice %}<a class="row-link" href="/invoices/{{ item.invoice.id }}">{{ item.filename }}</a>{% else %}{{ item.filename }}{% endif %}</td>
+          <td>
+            {% if item.result == 'processed' %}
+              <span class="status status-{{ item.detail }}">{{ 'needs review' if item.detail == 'review' else item.detail }}</span>
+            {% elif item.result == 'already_uploaded' %}
+              <span class="status status-duplicate">already uploaded</span>
+            {% else %}
+              <span class="status status-rejected">skipped</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if item.result == 'processed' %}
+              {% if item.invoice.issues %}{{ item.invoice.issues|first }}{% if item.invoice.issues|length > 1 %} <span class="muted">+{{ item.invoice.issues|length - 1 }} more</span>{% endif %}{% else %}<span class="muted">Nothing to check.</span>{% endif %}
+            {% else %}{{ item.detail }}{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}
+      <div class="empty-state">No files were selected.</div>
+    {% endif %}
+    <div class="panel-foot"><a class="text-link" href="/">Open the invoice queue</a></div>
+  </section>
+  {% endif %}
 </section>
 {% endblock %}

@@ -1,148 +1,133 @@
+"""Create demo invoices that show every outcome: approved, needs review, duplicate.
+
+    python seed_demo.py            # refuses to touch a database that already has invoices
+    python seed_demo.py --reset    # wipes invoices and stored PDFs first
+"""
+from __future__ import annotations
+
+import argparse
+from io import BytesIO
 from pathlib import Path
+import shutil
+import sys
+
 from reportlab.lib.pagesizes import LETTER
 from reportlab.pdfgen import canvas
+from sqlalchemy import func, select
 
-from app.database import Base, SessionLocal, engine
-from app.extractor import extract_invoice_fields, extract_pdf_text
+from app.config import Settings
+from app.database import Base, build_engine, build_session_factory, ensure_schema
 from app.models import Invoice
-from app.services import find_duplicate, sha256_file
+from app.processing import process_upload
 
 BASE_DIR = Path(__file__).resolve().parent
 SAMPLES = BASE_DIR / "sample_invoices"
-UPLOADS = BASE_DIR / "data" / "uploads"
-SAMPLES.mkdir(exist_ok=True)
-UPLOADS.mkdir(parents=True, exist_ok=True)
 
-INVOICES = [
-    {
-        "filename": "northstar_cloud_invoice.pdf",
-        "vendor": "Northstar Cloud Services",
-        "invoice_number": "INV-2026-1048",
-        "invoice_date": "2026-07-22",
-        "due_date": "2026-08-21",
-        "subtotal": 1280.00,
-        "tax": 102.40,
-        "total": 1382.40,
-        "currency": "USD",
-    },
-    {
-        "filename": "brightline_office_invoice.pdf",
-        "vendor": "Brightline Office Supply",
-        "invoice_number": "BOS-88721",
-        "invoice_date": "2026-07-27",
-        "due_date": "2026-08-11",
-        "subtotal": 642.50,
-        "tax": 51.40,
-        "total": 693.90,
-        "currency": "USD",
-    },
-    {
-        "filename": "atlas_logistics_invoice.pdf",
-        "vendor": "Atlas Logistics Group",
-        "invoice_number": "ALG-44019",
-        "invoice_date": "2026-07-30",
-        "due_date": "2026-08-14",
-        "subtotal": 2310.00,
-        "tax": 184.80,
-        "total": 2494.80,
-        "currency": "USD",
-    },
-    {
-        "filename": "vertex_media_invoice.pdf",
-        "vendor": "Vertex Media Studio",
-        "invoice_number": "VM-260731",
-        "invoice_date": "2026-07-31",
-        "due_date": "2026-08-15",
-        "subtotal": 875.00,
-        "tax": 70.00,
-        "total": 945.00,
-        "currency": "USD",
-    },
-]
 
-def create_pdf(path: Path, data: dict):
-    c = canvas.Canvas(str(path), pagesize=LETTER)
+def pdf_bytes(vendor: str | None, lines: list[str]) -> bytes:
+    """A one-page invoice. ``invariant=1`` keeps the bytes identical on every run."""
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=LETTER, invariant=1)
     width, height = LETTER
-    c.setFont("Helvetica-Bold", 20)
-    c.drawString(54, height - 70, data["vendor"])
-    c.setFont("Helvetica-Bold", 28)
-    c.drawRightString(width - 54, height - 70, "INVOICE")
+    if vendor:
+        c.setFont("Helvetica-Bold", 20)
+        c.drawString(54, height - 70, vendor)
+        c.setFont("Helvetica-Bold", 26)
+        c.drawRightString(width - 54, height - 70, "INVOICE")
     c.setFont("Helvetica", 11)
     y = height - 125
-    lines = [
-        f"Vendor: {data['vendor']}",
-        f"Invoice Number: {data['invoice_number']}",
-        f"Invoice Date: {data['invoice_date']}",
-        f"Due Date: {data['due_date']}",
-        "",
-        "Bill To: Example Operations LLC",
-        "Description: Professional services and account support",
-        "",
-        f"Subtotal: ${data['subtotal']:.2f}",
-        f"Tax: ${data['tax']:.2f}",
-        f"Total: ${data['total']:.2f}",
-        f"Currency: {data['currency']}",
-    ]
     for line in lines:
         c.drawString(54, y, line)
         y -= 24
     c.save()
+    return buffer.getvalue()
 
-def main():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
-    try:
-        for item in INVOICES:
-            sample_path = SAMPLES / item["filename"]
-            create_pdf(sample_path, item)
-            upload_path = UPLOADS / item["filename"]
-            upload_path.write_bytes(sample_path.read_bytes())
-            text = extract_pdf_text(upload_path)
-            fields = extract_invoice_fields(text)
-            file_hash = sha256_file(upload_path)
-            duplicate = find_duplicate(
-                db,
-                file_hash=file_hash,
-                vendor=fields.get("vendor"),
-                invoice_number=fields.get("invoice_number"),
-            )
-            invoice = Invoice(
-                filename=item["filename"],
-                file_hash=file_hash,
-                raw_text=text,
-                status="approved" if fields["confidence"] >= 80 else "review",
-                is_duplicate=bool(duplicate),
-                duplicate_of_id=duplicate.id if duplicate else None,
-                **fields,
-            )
-            db.add(invoice)
-            db.commit()
 
-        # A deliberately lower-confidence record for the review queue.
-        review_pdf = SAMPLES / "harbor_maintenance_partial.pdf"
-        c = canvas.Canvas(str(review_pdf), pagesize=LETTER)
-        c.setFont("Helvetica-Bold", 20)
-        c.drawString(54, 720, "Harbor Maintenance Co.")
-        c.setFont("Helvetica", 11)
-        c.drawString(54, 670, "Invoice Number: HM-5521")
-        c.drawString(54, 640, "Total: $410.00")
-        c.save()
-        upload_path = UPLOADS / review_pdf.name
-        upload_path.write_bytes(review_pdf.read_bytes())
-        text = extract_pdf_text(upload_path)
-        fields = extract_invoice_fields(text)
-        db.add(Invoice(
-            filename=review_pdf.name,
-            file_hash=sha256_file(upload_path),
-            raw_text=text,
-            status="review",
-            **fields,
-        ))
-        db.commit()
-    finally:
-        db.close()
-    print("Demo database and sample invoice PDFs created.")
+def standard(vendor, number, date, due, subtotal, tax, total, currency="USD", symbol="$"):
+    return vendor, [
+        f"Vendor: {vendor}",
+        f"Invoice Number: {number}",
+        f"Invoice Date: {date}",
+        f"Due Date: {due}",
+        "",
+        "Bill To: Example Operations LLC",
+        "Description: Professional services and account support",
+        "",
+        f"Subtotal: {symbol}{subtotal}",
+        f"Tax: {symbol}{tax}",
+        f"Total: {symbol}{total}",
+        f"Currency: {currency}",
+    ]
+
+
+DEMO = {
+    "northstar_cloud_invoice.pdf": standard("Northstar Cloud Services", "INV-2026-1048", "2026-07-22", "2026-08-21", "1280.00", "102.40", "1382.40"),
+    "brightline_office_invoice.pdf": standard("Brightline Office Supply", "BOS-88721", "2026-07-27", "2026-08-11", "642.50", "51.40", "693.90"),
+    "atlas_logistics_invoice.pdf": standard("Atlas Logistics Group", "ALG-44019", "2026-07-30", "2026-08-14", "2310.00", "184.80", "2494.80"),
+    "vertex_media_invoice.pdf": standard("Vertex Media Studio", "VM-260731", "2026-07-31", "2026-08-15", "875.00", "70.00", "945.00"),
+    # European number format and a day-first date: read correctly, and approved.
+    "bergmann_elektro_invoice.pdf": (
+        "Bergmann Elektro GmbH",
+        [
+            "Vendor: Bergmann Elektro GmbH",
+            "Invoice Number: BE-2026-077",
+            "Invoice Date: 22.07.2026",
+            "Due Date: 21.08.2026",
+            "",
+            "Subtotal: € 2.150,00",
+            "VAT (19%): € 408,50",
+            "Total: € 2.558,50",
+        ],
+    ),
+    # Only some fields are present, so it waits for review.
+    "harbor_maintenance_partial.pdf": ("Harbor Maintenance Co.", ["Invoice Number: HM-5521", "Total: $410.00"]),
+    # The numbers do not add up: 500.00 + 40.00 is not 560.00.
+    "meridian_print_invoice.pdf": standard("Meridian Print Works", "MPW-3310", "2026-07-29", "2026-08-28", "500.00", "40.00", "560.00"),
+    # 03/04/2026 could be March 4 or April 3, so the date is left for a person.
+    "calloway_freight_invoice.pdf": (
+        "Calloway Freight",
+        ["Vendor: Calloway Freight", "Invoice Number: CF-1207", "Invoice Date: 03/04/2026", "Due Date: 2026-05-03", "", "Subtotal: $720.00", "Tax: $57.60", "Total: $777.60", "Currency: USD"],
+    ),
+    # The same vendor and number as the first invoice, sent again as a new file.
+    "northstar_cloud_invoice_resent.pdf": (
+        "Northstar Cloud Services",
+        ["Vendor: Northstar Cloud Services", "Invoice Number: INV-2026-1048", "Invoice Date: 2026-07-22", "Due Date: 2026-08-21", "", "Subtotal: $1280.00", "Tax: $102.40", "Total: $1382.40", "Currency: USD", "", "Reminder: second notice"],
+    ),
+    # A page with no text layer, like a scan.
+    "scanned_receipt.pdf": (None, []),
+}
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Create demo invoices.")
+    parser.add_argument("--reset", action="store_true", help="delete existing invoices and stored PDFs first")
+    args = parser.parse_args()
+
+    settings = Settings.from_env()
+    engine = build_engine(settings.database_url)
+    ensure_schema(engine)
+    SessionLocal = build_session_factory(engine)
+
+    with SessionLocal() as probe:
+        existing = probe.scalar(select(func.count(Invoice.id))) or 0
+    if existing and not args.reset:
+        sys.exit("The database already contains invoices. Run `python seed_demo.py --reset` to replace them.")
+
+    if args.reset:
+        Base.metadata.drop_all(engine)
+        ensure_schema(engine)
+        if settings.upload_dir.exists():
+            shutil.rmtree(settings.upload_dir)
+
+    SAMPLES.mkdir(exist_ok=True)
+    with SessionLocal() as db:
+        for filename, (vendor, lines) in DEMO.items():
+            data = pdf_bytes(vendor, lines)
+            (SAMPLES / filename).write_bytes(data)
+            outcome = process_upload(db, settings, filename, data)
+            print(f"{filename}: {outcome.result} ({outcome.detail})")
+    print("Demo invoices created.")
+
 
 if __name__ == "__main__":
     main()
